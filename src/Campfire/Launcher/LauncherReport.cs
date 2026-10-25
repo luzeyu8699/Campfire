@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Campfire.Localization;
 using Campfire.Patching;
 
@@ -32,7 +33,8 @@ namespace Campfire.Launcher
 
         public IReadOnlyList<PatchReport> Patches { get; }
 
-        public bool CanFix => Status == LauncherStatus.Blocked;
+        public bool CanFix => Status == LauncherStatus.Blocked
+            || (Status == LauncherStatus.Patched && Patches.Any(p => p.State == PatchState.Pending));
 
         /// <summary>User-facing explanation of <see cref="Status"/>, in the current display language.</summary>
         public string Message => Text.Format(MessageKey, MessageArgs);

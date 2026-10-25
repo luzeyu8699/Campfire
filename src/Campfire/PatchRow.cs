@@ -58,13 +58,16 @@ namespace Campfire
             }
         }
 
-        public static PatchRow From(PatchReport report, LauncherStatus launcherStatus)
+        public static PatchRow From(PatchReport report, LauncherStatus launcherStatus, bool hasBackup)
         {
             string stateText;
             switch (report.State)
             {
                 case PatchState.Applied:
-                    stateText = launcherStatus == LauncherStatus.Patched ? report.AppliedText : Text.Get("PatchState.Normal");
+                    stateText = launcherStatus == LauncherStatus.Patched
+                                || (hasBackup && launcherStatus == LauncherStatus.Blocked)
+                        ? report.AppliedText
+                        : Text.Get("PatchState.Normal");
                     break;
                 case PatchState.Pending:
                     stateText = Text.Get("PatchState.Pending");
@@ -73,8 +76,11 @@ namespace Campfire
                     stateText = Text.Get(launcherStatus == LauncherStatus.NotBlocked ? "PatchState.NotNeeded" : "PatchState.NotFound");
                     break;
             }
-            bool isSelectable = launcherStatus == LauncherStatus.Blocked && report.State == PatchState.Pending;
-            bool isChecked = report.State == PatchState.Applied || isSelectable;
+            bool canRepair = (launcherStatus == LauncherStatus.Blocked || launcherStatus == LauncherStatus.Patched)
+                             && report.State == PatchState.Pending;
+            bool canRestore = hasBackup && report.State == PatchState.Applied;
+            bool isSelectable = canRepair || canRestore;
+            bool isChecked = isSelectable;
             return Create(report.Title, report.Description, stateText, report.State,
                 isSelectable, isChecked, report.Id);
         }

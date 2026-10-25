@@ -52,7 +52,7 @@ namespace Campfire.Pages
         public event EventHandler StatusChanged;
 
         /// <summary>Whether the selected launcher has its downloads switched off and can be repaired.</summary>
-        public bool NeedsRepair => _report?.CanFix == true && _report.Status != LauncherStatus.Patched;
+        public bool NeedsRepair => _report?.CanFix == true;
 
         /// <summary>Whether the selected launcher has been repaired by Campfire.</summary>
         public bool IsRepaired => _report?.Status == LauncherStatus.Patched;
@@ -132,11 +132,14 @@ namespace Campfire.Pages
             List<PatchRow> rows;
             if (_report != null && _report.Patches.Count > 0)
             {
+                bool hasBackup = LauncherFixer.HasBackup(_report.Path);
                 if (resetSelection)
                 {
                     _selectedPatchIds.Clear();
                     foreach (var patch in _report.Patches.Where(p =>
-                                 _report.Status == LauncherStatus.Blocked && p.State == PatchState.Pending))
+                                 ((_report.Status == LauncherStatus.Blocked || _report.Status == LauncherStatus.Patched)
+                                  && p.State == PatchState.Pending)
+                                 || (hasBackup && p.State == PatchState.Applied)))
                     {
                         _selectedPatchIds.Add(patch.Id);
                     }
@@ -144,7 +147,7 @@ namespace Campfire.Pages
 
                 rows = _report.Patches.Select(p =>
                 {
-                    var row = PatchRow.From(p, _report.Status);
+                    var row = PatchRow.From(p, _report.Status, hasBackup);
                     if (row.IsSelectable)
                         row.IsChecked = _selectedPatchIds.Contains(row.Key);
                     row.PropertyChanged += PatchRow_PropertyChanged;
@@ -219,12 +222,19 @@ namespace Campfire.Pages
                 return;
 
             string path = _report.Path;
+            string[] selected = GetSelectedPatchIds(PatchState.Applied);
+            if (selected.Length == 0)
+            {
+                ShowHint(HintKind.Error, () => Text.Get("Status.NoRestoreSelected"));
+                return;
+            }
+
             SetBusy(true);
             ShowHint(HintKind.Info, () => Text.Get("Status.Restoring"));
             try
             {
-                Render(await Task.Run(() => LauncherFixer.Restore(path)));
-                ShowHint(HintKind.Info, () => Text.Get("Status.Restored"));
+                Render(await Task.Run(() => LauncherFixer.Restore(path, selected)));
+                ShowHint(HintKind.Info, () => Text.Get("Status.RestoreSelectedDone"));
             }
             catch (LauncherException ex)
             {
@@ -304,20 +314,32 @@ namespace Campfire.Pages
         {
             bool hasFile = _report != null && File.Exists(_report.Path);
             bool works = _report?.Status == LauncherStatus.Patched || _report?.Status == LauncherStatus.NotBlocked;
+            bool hasPendingPatch = _report?.Patches.Any(p => p.State == PatchState.Pending) == true;
+            bool hasPendingSelection = GetSelectedPatchIds(PatchState.Pending).Length > 0;
+            bool hasAppliedSelection = GetSelectedPatchIds(PatchState.Applied).Length > 0;
 
             BtnBrowse.IsEnabled = !_busy;
-            BtnFix.IsEnabled = !_busy && _report?.CanFix == true && _selectedPatchIds.Count > 0;
-            BtnRestore.IsEnabled = !_busy && hasFile && LauncherFixer.HasBackup(_report.Path);
+            BtnFix.IsEnabled = !_busy && _report?.CanFix == true && hasPendingSelection;
+            BtnRestore.IsEnabled =
+                !_busy && hasFile && LauncherFixer.HasBackup(_report.Path) && hasAppliedSelection;
             BtnOpenFolder.IsEnabled = hasFile;
             BtnLaunch.Visibility = hasFile && works ? Visibility.Visible : Visibility.Collapsed;
             BtnLaunch.IsEnabled = !_busy;
 
             if (_fixing)
                 BtnFix.Content = Text.Get("Main.Fixing");
-            else if (_report?.Status == LauncherStatus.Patched)
+            else if (_report?.Status == LauncherStatus.Patched && !hasPendingPatch)
                 BtnFix.Content = Text.Get("Main.Fixed");
             else
                 BtnFix.Content = Text.Get("Main.FixSelected");
+        }
+
+        private string[] GetSelectedPatchIds(PatchState state)
+        {
+            return _report?.Patches
+                .Where(p => p.State == state && _selectedPatchIds.Contains(p.Id))
+                .Select(p => p.Id)
+                .ToArray() ?? Array.Empty<string>();
         }
 
         /// <summary>Shows a failure in the status bar and as an alert, so it cannot be missed.</summary>

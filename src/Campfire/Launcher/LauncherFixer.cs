@@ -117,6 +117,93 @@ namespace Campfire.Launcher
             return LauncherInspector.Inspect(launcherPath);
         }
 
+        /// <summary>
+        /// Reverts only the selected applied repairs. The original backup is retained when other repairs remain.
+        /// </summary>
+        public static LauncherReport Restore(string launcherPath, IReadOnlyCollection<string> selectedPatchIds)
+        {
+            LauncherFile.EnsureNotRunning(launcherPath);
+            string backupPath = GetBackupPath(launcherPath);
+            if (!File.Exists(backupPath))
+                throw new LauncherException("Fix.NoBackup");
+
+            var current = LauncherInspector.Inspect(launcherPath);
+            var backup = LauncherInspector.Inspect(backupPath);
+            if (current.Status == LauncherStatus.NotLauncher || backup.Status == LauncherStatus.NotLauncher)
+                throw new LauncherException("Fix.BadBackup");
+            if (current.Kind != backup.Kind || !string.Equals(current.Version, backup.Version, StringComparison.Ordinal))
+                throw new LauncherException("Fix.BadBackup");
+
+            var selected = selectedPatchIds == null
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : new HashSet<string>(selectedPatchIds, StringComparer.Ordinal);
+            if (current.Kind == LauncherKind.Community)
+            {
+                if (!selected.Contains("RegionLimit")
+                    || current.Patches.All(p => p.Id != "RegionLimit" || p.State != PatchState.Applied))
+                {
+                    throw new LauncherException("Fix.NothingToRestore");
+                }
+                return Restore(launcherPath);
+            }
+
+            var backupStates = backup.Patches.ToDictionary(p => p.Id, p => p.State, StringComparer.Ordinal);
+            var restoredIds = current.Patches
+                .Where(p => p.State == PatchState.Applied && selected.Contains(p.Id))
+                .Where(p => backupStates.TryGetValue(p.Id, out var state) && state == PatchState.Pending)
+                .Select(p => p.Id)
+                .ToList();
+            if (restoredIds.Count == 0)
+                throw new LauncherException("Fix.NothingToRestore");
+
+            var restoredSet = new HashSet<string>(restoredIds, StringComparer.Ordinal);
+            byte[] original = LauncherFile.Read(backupPath);
+            byte[] restored;
+            string[] keptPatchIds;
+            using (var module = LauncherInspector.LoadModule(original))
+            {
+                var toKeep = PatchCatalog.All
+                    .Where(p => !restoredSet.Contains(p.Id))
+                    .Where(p => p.GetState(module) == PatchState.Pending)
+                    .Where(p => current.Patches.Any(report =>
+                        report.Id == p.Id && report.State == PatchState.Applied))
+                    .ToList();
+
+                foreach (var patch in toKeep)
+                {
+                    try
+                    {
+                        patch.Apply(module);
+                    }
+                    catch (PatchException ex)
+                    {
+                        throw new LauncherException(ex, "Fix.PatchFailed", patch.Title, ex.Message);
+                    }
+                }
+
+                keptPatchIds = toKeep.Select(p => p.Id).ToArray();
+                if (toKeep.Count > 0)
+                {
+                    AddPatchMarker(module, backup.Version);
+                    restored = Write(module);
+                }
+                else
+                {
+                    restored = original;
+                }
+            }
+
+            var verified = VerifyRestore(launcherPath, restored, restoredIds, keptPatchIds);
+            if (keptPatchIds.Length == 0)
+            {
+                LauncherFile.Restore(launcherPath, backupPath);
+                return LauncherInspector.Inspect(launcherPath);
+            }
+
+            LauncherFile.Replace(launcherPath, backupPath, restored, preserveExistingBackup: true);
+            return verified;
+        }
+
         private static ModuleDefMD LoadLauncher(string path)
         {
             byte[] data = LauncherFile.Read(path);
@@ -173,6 +260,23 @@ namespace Campfire.Launcher
                 var states = report.Patches.ToDictionary(p => p.Id, p => p.State, StringComparer.Ordinal);
                 bool complete = appliedPatchIds.All(id =>
                     states.TryGetValue(id, out var state) && state == PatchState.Applied);
+                if (!complete)
+                    throw new LauncherException("Fix.VerifyFailed");
+                return report;
+            }
+        }
+
+        private static LauncherReport VerifyRestore(string launcherPath, byte[] restored,
+            IReadOnlyCollection<string> restoredPatchIds, IReadOnlyCollection<string> keptPatchIds)
+        {
+            using (var module = LauncherInspector.LoadModule(restored))
+            {
+                var report = LauncherInspector.Inspect(launcherPath, module);
+                var states = report.Patches.ToDictionary(p => p.Id, p => p.State, StringComparer.Ordinal);
+                bool complete = restoredPatchIds.All(id =>
+                                   states.TryGetValue(id, out var state) && state == PatchState.Pending)
+                               && keptPatchIds.All(id =>
+                                   states.TryGetValue(id, out var state) && state == PatchState.Applied);
                 if (!complete)
                     throw new LauncherException("Fix.VerifyFailed");
                 return report;

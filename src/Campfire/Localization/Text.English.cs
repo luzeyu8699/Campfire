@@ -124,12 +124,14 @@ namespace Campfire.Localization
             "Main.OpenFolder", "Open folder",
             "Main.LaunchPcl", "Open launcher",
             "Main.Patches", "Repair items",
-            "Main.SelectRepairsHelp", "Select the items to repair. Applied items and items not needed by this version cannot be selected.",
+            "Main.SelectRepairsHelp", "Select pending items to repair or applied items to restore. Each button only acts on its matching selected items.",
             "Main.SelectRepair", "Select this repair item",
             "Main.About", "About",
             "Main.AboutTooltip", "Version, author and source code",
             "Main.Restore", "Restore",
             "Main.RestoreTooltip", "Restore the launcher from its backup",
+            "Main.RestoreSelected", "Restore selected",
+            "Main.RestoreSelectedTooltip", "Revert only the selected applied repairs and keep the others",
             "Main.Fix", "Repair",
             "Main.FixSelected", "Repair selected",
             "Main.Fixing", "Repairing",
@@ -151,6 +153,8 @@ namespace Campfire.Localization
             "Status.FixUnexpected", "An unexpected error occurred and the launcher was not changed: {0}",
             "Status.Restoring", "Restoring.",
             "Status.Restored", "The launcher has been restored to its original version.",
+            "Status.RestoreSelectedDone", "The selected repairs were restored.",
+            "Status.NoRestoreSelected", "Select at least one applied repair item to restore.",
             "Status.Unexpected", "An unexpected error occurred: {0}",
             "Status.LaunchFailed", "Launch failed: {0}",
 
@@ -543,6 +547,7 @@ namespace Campfire.Localization
 
             // Repair and restore
             "Fix.NothingSelected", "None of the selected repair items can be applied.",
+            "Fix.NothingToRestore", "The selected items cannot be restored separately, or the original launcher already had them.",
             "Fix.PatchFailed", "Failed to apply \"{0}\": {1}",
             "Fix.WriteFailed", "Failed to write the file: {0}\nIf the launcher is in a protected folder such as Program Files, run Campfire as administrator.",
             "Fix.NoBackup", "No backup was found, so nothing can be restored.",

@@ -119,8 +119,8 @@
 
         <Grid Margin="0,18,0,0">
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                <Button x:Name="BtnRestore" Content="{loc:Text Main.Restore}" Style="{StaticResource PclButton}"
-                        IsEnabled="False" ToolTip="{loc:Text Main.RestoreTooltip}" Click="BtnRestore_Click" />
+                <Button x:Name="BtnRestore" Content="{loc:Text Main.RestoreSelected}" Style="{StaticResource PclButton}"
+                        IsEnabled="False" ToolTip="{loc:Text Main.RestoreSelectedTooltip}" Click="BtnRestore_Click" />
                 <Button x:Name="BtnFix" Margin="12,0,0,0" MinWidth="140" Content="{loc:Text Main.Fix}" FontWeight="Bold"
                         Style="{StaticResource PclButtonHighlight}" IsEnabled="False" Click="BtnFix_Click" />
             </StackPanel>
