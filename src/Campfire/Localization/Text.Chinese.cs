@@ -175,6 +175,7 @@ namespace Campfire.Localization
             "About.Header", "关于",
             "About.Summary", "先进的 Minecraft 工具",
             "About.AuthorRole", "开发者 · Github.com/Xocio",
+            "About.ThirdPartyRole", "第三方构建发布者 · Github.com/luzeyu8699",
             "About.Homepage", "主页",
             "About.RepoSummary", "源代码、问题反馈与新版本下载",
             "About.Repository", "仓库",

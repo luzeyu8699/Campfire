@@ -175,6 +175,7 @@ namespace Campfire.Localization
             "About.Header", "About",
             "About.Summary", "Minecraft multiplayer with invite codes, plus repairs for the official PCL. Free and open source.",
             "About.AuthorRole", "Author · github.com/Xocio",
+            "About.ThirdPartyRole", "Third-party build publisher · github.com/luzeyu8699",
             "About.Homepage", "Profile",
             "About.RepoSummary", "Source code, issue reports and downloads",
             "About.Repository", "Repository",
