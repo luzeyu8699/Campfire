@@ -12,6 +12,9 @@ namespace Campfire.Patching
         /// <summary>Identifier used for the localized title and description ("Patch.{TextKey}.Title").</summary>
         protected abstract string TextKey { get; }
 
+        /// <summary>Stable identifier used to select this patch independently in the repair UI.</summary>
+        internal string Id => TextKey;
+
         /// <summary>Short title shown in the UI.</summary>
         public string Title => Text.Get($"Patch.{TextKey}.Title");
 

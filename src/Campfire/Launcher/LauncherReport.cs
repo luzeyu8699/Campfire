@@ -55,6 +55,8 @@ namespace Campfire.Launcher
             State = state;
         }
 
+        public string Id => _patch.Id;
+
         public string Title => _patch.Title;
 
         public string Description => _patch.Description;

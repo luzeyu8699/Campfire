@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -32,6 +33,17 @@ namespace Campfire.Launcher
         /// <returns>The report of the patched file.</returns>
         public static LauncherReport Fix(string launcherPath)
         {
+            return Fix(launcherPath, null);
+        }
+
+        /// <summary>
+        /// Patches only the selected repair items. The original file is kept next to it as a backup.
+        /// </summary>
+        /// <param name="launcherPath">Launcher file to modify.</param>
+        /// <param name="selectedPatchIds">Patch identifiers to apply; <c>null</c> selects every pending item.</param>
+        /// <returns>The report of the patched file, including any items that were intentionally left unselected.</returns>
+        public static LauncherReport Fix(string launcherPath, IReadOnlyCollection<string> selectedPatchIds)
+        {
             LauncherFile.EnsureNotRunning(launcherPath);
 
             // The community edition is a bundle of assemblies; it needs an in-place fix instead of a module rewrite.
@@ -40,17 +52,33 @@ namespace Campfire.Launcher
             {
                 if (initial.Status == LauncherStatus.Unsupported)
                     throw new LauncherException(initial.MessageKey, initial.MessageArgs);
+                if (selectedPatchIds != null
+                    && !selectedPatchIds.Contains("RegionLimit", StringComparer.Ordinal))
+                {
+                    throw new LauncherException("Fix.NothingSelected");
+                }
                 return CommunityLauncher.Fix(launcherPath);
             }
 
+            var selected = selectedPatchIds == null
+                ? null
+                : new HashSet<string>(selectedPatchIds, StringComparer.Ordinal);
             byte[] patched;
+            string[] appliedPatchIds;
             using (var module = LoadLauncher(launcherPath))
             {
                 var report = LauncherInspector.Inspect(launcherPath, module);
                 if (!report.CanFix)
                     throw new LauncherException(report.MessageKey, report.MessageArgs);
 
-                foreach (var patch in PatchCatalog.All.Where(p => p.GetState(module) == PatchState.Pending))
+                var pending = PatchCatalog.All
+                    .Where(p => p.GetState(module) == PatchState.Pending)
+                    .Where(p => selected == null || selected.Contains(p.Id))
+                    .ToList();
+                if (pending.Count == 0)
+                    throw new LauncherException("Fix.NothingSelected");
+
+                foreach (var patch in pending)
                 {
                     try
                     {
@@ -62,11 +90,12 @@ namespace Campfire.Launcher
                     }
                 }
 
+                appliedPatchIds = pending.Select(p => p.Id).ToArray();
                 AddPatchMarker(module, report.Version);
                 patched = Write(module);
             }
 
-            var verified = Verify(launcherPath, patched);
+            var verified = Verify(launcherPath, patched, appliedPatchIds);
             LauncherFile.Replace(launcherPath, GetBackupPath(launcherPath), patched);
             return verified;
         }
@@ -136,13 +165,14 @@ namespace Campfire.Launcher
         }
 
         /// <summary>Reloads the patched image and checks every required patch point.</summary>
-        private static LauncherReport Verify(string launcherPath, byte[] patched)
+        private static LauncherReport Verify(string launcherPath, byte[] patched, IReadOnlyCollection<string> appliedPatchIds)
         {
             using (var module = LauncherInspector.LoadModule(patched))
             {
                 var report = LauncherInspector.Inspect(launcherPath, module);
-                bool complete = report.Status == LauncherStatus.Patched
-                    && report.Patches.All(p => p.State == PatchState.Applied);
+                var states = report.Patches.ToDictionary(p => p.Id, p => p.State, StringComparer.Ordinal);
+                bool complete = appliedPatchIds.All(id =>
+                    states.TryGetValue(id, out var state) && state == PatchState.Applied);
                 if (!complete)
                     throw new LauncherException("Fix.VerifyFailed");
                 return report;

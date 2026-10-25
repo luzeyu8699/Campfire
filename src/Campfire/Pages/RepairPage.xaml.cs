@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -28,6 +29,7 @@ namespace Campfire.Pages
         private LauncherReport _report;
         private bool _busy;
         private bool _fixing;
+        private readonly HashSet<string> _selectedPatchIds = new HashSet<string>(StringComparer.Ordinal);
 
         // The hint text is produced on demand so it follows language changes.
         private HintKind _hintKind;
@@ -114,16 +116,60 @@ namespace Campfire.Pages
                     break;
             }
 
-            RenderPatches();
+            RenderPatches(resetSelection: true);
             UpdateButtons();
             StatusChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        private void RenderPatches()
+        private void RenderPatches(bool resetSelection = false)
         {
-            ListPatches.ItemsSource = _report != null && _report.Patches.Count > 0
-                ? _report.Patches.Select(p => PatchRow.From(p, _report.Status)).ToList()
-                : PatchCatalog.All.Select(PatchRow.Placeholder).ToList();
+            if (ListPatches.ItemsSource is IEnumerable<PatchRow> oldRows)
+            {
+                foreach (var row in oldRows)
+                    row.PropertyChanged -= PatchRow_PropertyChanged;
+            }
+
+            List<PatchRow> rows;
+            if (_report != null && _report.Patches.Count > 0)
+            {
+                if (resetSelection)
+                {
+                    _selectedPatchIds.Clear();
+                    foreach (var patch in _report.Patches.Where(p =>
+                                 _report.Status == LauncherStatus.Blocked && p.State == PatchState.Pending))
+                    {
+                        _selectedPatchIds.Add(patch.Id);
+                    }
+                }
+
+                rows = _report.Patches.Select(p =>
+                {
+                    var row = PatchRow.From(p, _report.Status);
+                    if (row.IsSelectable)
+                        row.IsChecked = _selectedPatchIds.Contains(row.Key);
+                    row.PropertyChanged += PatchRow_PropertyChanged;
+                    return row;
+                }).ToList();
+            }
+            else
+            {
+                rows = PatchCatalog.All.Select(PatchRow.Placeholder).ToList();
+            }
+
+            ListPatches.ItemsSource = rows;
+            UpdateButtons();
+        }
+
+        private void PatchRow_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(PatchRow.IsChecked) || !(sender is PatchRow row) || !row.IsSelectable)
+                return;
+
+            if (row.IsChecked)
+                _selectedPatchIds.Add(row.Key);
+            else
+                _selectedPatchIds.Remove(row.Key);
+            UpdateButtons();
         }
 
         // ======================== Fix / restore ========================
@@ -134,13 +180,23 @@ namespace Campfire.Pages
                 return;
 
             string path = _report.Path;
+            string[] selected = _report.Patches
+                .Where(p => p.State == PatchState.Pending && _selectedPatchIds.Contains(p.Id))
+                .Select(p => p.Id)
+                .ToArray();
+            if (selected.Length == 0)
+            {
+                ShowHint(HintKind.Error, () => Text.Get("Status.NoRepairSelected"));
+                return;
+            }
+
             SetBusy(true, fixing: true);
             ShowHint(HintKind.Info, () => Text.Get("Status.Fixing"));
             try
             {
-                Render(await Task.Run(() => LauncherFixer.Fix(path)));
+                Render(await Task.Run(() => LauncherFixer.Fix(path, selected)));
                 string backupName = Path.GetFileName(LauncherFixer.GetBackupPath(path));
-                ShowHint(HintKind.Success, () => Text.Format("Status.FixDone", backupName));
+                ShowHint(HintKind.Success, () => Text.Format("Status.FixSelectedDone", backupName));
                 Online.Telemetry.Count("repair");
             }
             catch (LauncherException ex)
@@ -250,7 +306,7 @@ namespace Campfire.Pages
             bool works = _report?.Status == LauncherStatus.Patched || _report?.Status == LauncherStatus.NotBlocked;
 
             BtnBrowse.IsEnabled = !_busy;
-            BtnFix.IsEnabled = !_busy && _report?.CanFix == true;
+            BtnFix.IsEnabled = !_busy && _report?.CanFix == true && _selectedPatchIds.Count > 0;
             BtnRestore.IsEnabled = !_busy && hasFile && LauncherFixer.HasBackup(_report.Path);
             BtnOpenFolder.IsEnabled = hasFile;
             BtnLaunch.Visibility = hasFile && works ? Visibility.Visible : Visibility.Collapsed;
@@ -261,7 +317,7 @@ namespace Campfire.Pages
             else if (_report?.Status == LauncherStatus.Patched)
                 BtnFix.Content = Text.Get("Main.Fixed");
             else
-                BtnFix.Content = Text.Get("Main.Fix");
+                BtnFix.Content = Text.Get("Main.FixSelected");
         }
 
         /// <summary>Shows a failure in the status bar and as an alert, so it cannot be missed.</summary>
