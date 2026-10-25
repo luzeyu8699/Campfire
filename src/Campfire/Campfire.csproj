@@ -67,6 +67,7 @@
   <ItemGroup>
     <Resource Include="Assets\CampfireFrames.png" />
     <Resource Include="Assets\Avatar.jpg" />
+    <Resource Include="Assets\Avatar.Publisher.jpg" />
     <!--
       The Java agent and its attach bridge are built from java-agent/ and embedded in Campfire.exe.
       They add the room header, footer and welcome message from inside the host's own server, which
