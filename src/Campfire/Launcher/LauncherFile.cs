@@ -34,17 +34,23 @@ namespace Campfire.Launcher
                 throw new LauncherException("Fix.Running");
         }
 
-        /// <summary>
-        /// Copies the original launcher to <paramref name="backupPath"/> when needed, then writes
-        /// <paramref name="patched"/> over it. Repeated selective repairs keep the first original backup.
-        /// </summary>
+        /// <summary>Copies the launcher to <paramref name="backupPath"/>, then writes <paramref name="patched"/> over it.</summary>
         public static void Replace(string path, string backupPath, byte[] patched)
+        {
+            Replace(path, backupPath, patched, preserveExistingBackup: false);
+        }
+
+        /// <summary>
+        /// Writes <paramref name="patched"/> over the launcher. When <paramref name="preserveExistingBackup"/>
+        /// is set, an existing backup is left untouched so repeated selective repairs keep the first original.
+        /// </summary>
+        public static void Replace(string path, string backupPath, byte[] patched, bool preserveExistingBackup)
         {
             string tempPath = path + TempExtension;
             try
             {
-                if (!File.Exists(backupPath))
-                    File.Copy(path, backupPath);
+                if (!preserveExistingBackup || !File.Exists(backupPath))
+                    File.Copy(path, backupPath, overwrite: true);
                 File.WriteAllBytes(tempPath, patched);
                 File.Copy(tempPath, path, overwrite: true);
             }

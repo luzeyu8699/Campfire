@@ -74,7 +74,7 @@ namespace Campfire.Launcher
             if (!TryInspect(path, patched, out verified) || verified.Status != LauncherStatus.Patched)
                 throw new LauncherException("Fix.VerifyFailed");
 
-            LauncherFile.Replace(path, LauncherFixer.GetBackupPath(path), patched);
+            LauncherFile.Replace(path, LauncherFixer.GetBackupPath(path), patched, preserveExistingBackup: true);
             return verified;
         }
 

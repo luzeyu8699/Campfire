@@ -96,7 +96,7 @@ namespace Campfire.Launcher
             }
 
             var verified = Verify(launcherPath, patched, appliedPatchIds);
-            LauncherFile.Replace(launcherPath, GetBackupPath(launcherPath), patched);
+            LauncherFile.Replace(launcherPath, GetBackupPath(launcherPath), patched, preserveExistingBackup: true);
             return verified;
         }
 
